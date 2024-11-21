@@ -1,79 +1,94 @@
 package com.example.hh;
 
-import android.annotation.SuppressLint;
-import android.content.ContentValues;
-import android.content.Intent;
-import android.database.Cursor;
-import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
 
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+
+import java.util.ArrayList;
+
+import io.paperdb.Paper;
 
 public class BookDetailActivity extends AppCompatActivity {
     private EditText editTextName, editTextAuthor;
-    private Button updateButton, deleteButton;
-    private DataBaseHelper dbHelper;
     private int bookId;
 
     @Override
-    protected void onCreate(@Nullable Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_book_detail);
 
+        Paper.init(this);
+
         editTextName = findViewById(R.id.editTextName);
         editTextAuthor = findViewById(R.id.editTextAuthor);
-        updateButton = findViewById(R.id.update);
-        deleteButton = findViewById(R.id.delete);
-        dbHelper = new DataBaseHelper(this);
+        Button updateButton = findViewById(R.id.update);
+        Button deleteButton = findViewById(R.id.delete);
 
-        Intent intent = getIntent();
-        bookId = intent.getIntExtra("BOOK_ID", -1);
+        bookId = getIntent().getIntExtra("BOOK_ID", -1);
+        System.out.println("Полученный bookId: " + bookId);
+
         if (bookId == -1) {
             Toast.makeText(this, "Ошибка загрузки книги", Toast.LENGTH_SHORT).show();
             finish();
         } else {
-            loadBookDetails(bookId);
+            loadBookDetails();
         }
 
         updateButton.setOnClickListener(v -> updateBookDetails());
         deleteButton.setOnClickListener(v -> deleteBook());
     }
 
-    private void loadBookDetails(int bookId) {
-        Cursor cursor = dbHelper.getAllBooks();
-        while (cursor.moveToNext()) {
-            if (cursor.getInt(cursor.getColumnIndexOrThrow(DataBaseHelper.COLUMN_ID)) == bookId) {
-                editTextName.setText(cursor.getString(cursor.getColumnIndexOrThrow(DataBaseHelper.COLUMN_NAME)));
-                editTextAuthor.setText(cursor.getString(cursor.getColumnIndexOrThrow(DataBaseHelper.COLUMN_AUTHOR)));
+    private void loadBookDetails() {
+        ArrayList<book> books = Paper.book().read("books", new ArrayList<>());
+        for (book b : books) {
+            if (b.getID_Book() == bookId) {
+                editTextName.setText(b.getBook_Name());
+                editTextAuthor.setText(b.getBook_Author());
                 break;
             }
         }
-        cursor.close();
     }
 
     private void updateBookDetails() {
         String newName = editTextName.getText().toString().trim();
         String newAuthor = editTextAuthor.getText().toString().trim();
+
         if (newName.isEmpty() || newAuthor.isEmpty()) {
             Toast.makeText(this, "Заполните все поля", Toast.LENGTH_SHORT).show();
             return;
         }
-        ContentValues values = new ContentValues();
-        values.put(DataBaseHelper.COLUMN_NAME, newName);
-        values.put(DataBaseHelper.COLUMN_AUTHOR, newAuthor);
-        SQLiteDatabase db = dbHelper.getWritableDatabase();
-        db.update(DataBaseHelper.TABLE_NAME, values, DataBaseHelper.COLUMN_ID + " = ?", new String[]{String.valueOf(bookId)});
-        db.close();
-        Toast.makeText(this, "Книга обновлена", Toast.LENGTH_SHORT).show();
+        ArrayList<book> books = Paper.book().read("books", new ArrayList<>());
+        boolean updated = false;
+        for (book b : books) {
+            if (b.getID_Book() == bookId) {
+                b.setBook_Name(newName);
+                b.setBook_Author(newAuthor);
+                updated = true;
+                break;
+            }
+        }
+        if (updated) {
+            Paper.book().write("books", books);
+
+            for (book b : books) {
+                System.out.println("Книга: " + b.getID_Book() + " - " + b.getBook_Name() + " - " + b.getBook_Author());
+            }
+            Toast.makeText(this, "Книга обновлена", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "Книга не найдена", Toast.LENGTH_SHORT).show();
+        }
         finish();
     }
 
+
     private void deleteBook() {
-        dbHelper.deleteBookById(bookId);
+        ArrayList<book> books = Paper.book().read("books", new ArrayList<>());
+        books.removeIf(b -> b.getID_Book() == bookId);
+        Paper.book().write("books", books);
+
         Toast.makeText(this, "Книга удалена", Toast.LENGTH_SHORT).show();
         finish();
     }
